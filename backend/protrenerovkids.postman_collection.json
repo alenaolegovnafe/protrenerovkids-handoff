@@ -1,0 +1,1262 @@
+{
+  "info": {
+    "name": "ProtrenerovKids.ru API",
+    "description": "Сгенерировано на основе API.md. Перед использованием: 1) запустить сервер (npm run dev), 2) прогнать npm run prisma:seed и скопировать токены из вывода в переменные коллекции adminToken/managerToken/coachToken.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "superAdminToken",
+      "value": "вставьте токен SUPER_ADMIN из вывода npm run prisma:seed"
+    },
+    {
+      "key": "managerToken",
+      "value": "вставьте токен MANAGER (Аня) из вывода npm run prisma:seed"
+    },
+    {
+      "key": "coachToken",
+      "value": "вставьте токен COACH (Елена) из вывода npm run prisma:seed"
+    },
+    {
+      "key": "coachId",
+      "value": ""
+    },
+    {
+      "key": "reviewId",
+      "value": ""
+    },
+    {
+      "key": "callRecordId",
+      "value": ""
+    },
+    {
+      "key": "bookingId",
+      "value": ""
+    },
+    {
+      "key": "claimToken",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Публичный каталог",
+      "item": [
+        {
+          "name": "Список тренеров",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/coaches?sport=figure_skating",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coaches"
+              ],
+              "query": [
+                {
+                  "key": "sport",
+                  "value": "figure_skating"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Профиль тренера",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/coaches/{{coachId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coaches",
+                "{{coachId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Заявка на запись (booking)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coaches/{{coachId}}/booking",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coaches",
+                "{{coachId}}",
+                "booking"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientName\": \"Иванова Софья\",\n  \"clientPhone\": \"+79001234567\",\n  \"childName\": \"Иванова Софья\",\n  \"childAge\": 7,\n  \"consent\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Клик по контакту (телефон/telegram/max/соцсети)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coaches/{{coachId}}/contact-click",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coaches",
+                "{{coachId}}",
+                "contact-click"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channel\": \"PHONE\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Отзывы (публично)",
+      "item": [
+        {
+          "name": "Оставить отзыв",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coaches/{{coachId}}/reviews",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "coaches",
+                "{{coachId}}",
+                "reviews"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientPhone\": \"+79619200000\",\n  \"isAnonymous\": false,\n  \"text\": \"Отличный тренер, дочка в восторге!\",\n  \"rating\": 5\n}"
+            }
+          }
+        },
+        {
+          "name": "Подтвердить отзыв по SMS-коду",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/reviews/{{reviewId}}/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "reviews",
+                "{{reviewId}}",
+                "confirm"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"123456\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Пожаловаться на отзыв",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/reviews/{{reviewId}}/complaints",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "reviews",
+                "{{reviewId}}",
+                "complaints"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"WRONG_COACH\",\n  \"comment\": \"Это не мой тренер\",\n  \"reporterContact\": \"+79001234567\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Арены, спортшколы, заявки",
+      "item": [
+        {
+          "name": "Список арен",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/arenas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "arenas"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Список спортшкол",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/sport-schools",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sport-schools"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Заявка на новый вид спорта",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/sport-requests",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sport-requests"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"consent\": true,\n  \"fullName\": \"Смирнова Ольга\",\n  \"phone\": \"+79004445566\",\n  \"sport\": \"gymnastics\",\n  \"city\": \"Екатеринбург\",\n  \"experienceYears\": 6,\n  \"price\": 1200\n}"
+            }
+          }
+        },
+        {
+          "name": "Пригласить тренера (referral)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/referrals",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "referrals"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coachName\": \"Иванова Ольга\",\n  \"parentPhone\": \"+79001234567\",\n  \"consent\": true\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Кабинет тренера",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{coachToken}}"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "Своя анкета",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/me/coach",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "me",
+                "coach"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Обновить анкету",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/me/coach",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "me",
+                "coach"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"about\": \"Обновлённое описание\",\n  \"priceFrom\": 2000,\n  \"phone\": \"+79001234567\",\n  \"bookingMode\": \"DIRECT_CONTACT\",\n  \"directContactPhone\": \"+79001234567\",\n  \"directContactTelegram\": \"@elena_skate\",\n  \"directContactMax\": \"max.ru/u/abc123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Опубликовать анкету",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/me/coach/publish",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "me",
+                "coach",
+                "publish"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"consent\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Свои заявки от учеников",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/me/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "me",
+                "bookings"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Свой дневник тренировок",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/me/diary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "me",
+                "diary"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Обновить дневник",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/me/diary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "me",
+                "diary"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"slots\": [\n    { \"dayOfWeek\": 1, \"startTime\": \"11:15\", \"studentName\": null },\n    { \"dayOfWeek\": 3, \"startTime\": \"15:00\", \"studentName\": \"Иванова Софья\" }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Вкл/выкл дневник",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/me/diary/calendar-toggle",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "me",
+                "diary",
+                "calendar-toggle"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabled\": false\n}"
+            }
+          }
+        },
+        {
+          "name": "Ответить на отзыв",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/me/reviews/{{reviewId}}/reply",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "me",
+                "reviews",
+                "{{reviewId}}",
+                "reply"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Спасибо за отзыв!\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Оформить подписку «Прямой контакт»",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/me/premium/subscribe",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "me",
+                "premium",
+                "subscribe"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Отменить подписку",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/me/premium/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "me",
+                "premium",
+                "cancel"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Документ по записи (PDF)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/me/bookings/{{bookingId}}/documents/contract",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "me",
+                "bookings",
+                "{{bookingId}}",
+                "documents",
+                "contract"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Админка — Анкеты тренеров",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{managerToken}}"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "Список моих анкет",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/coaches",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "coaches"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Топ тренеров по кликам",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/coaches/top-by-clicks?limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "coaches",
+                "top-by-clicks"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Создать анкету (проверка на дубли)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/coaches",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "coaches"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Иванов Иван\",\n  \"phone\": \"+79007778899\",\n  \"sport\": \"figure_skating\",\n  \"age\": 30,\n  \"experienceYears\": 5\n}"
+            }
+          }
+        },
+        {
+          "name": "Обновить анкету",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/coaches/{{coachId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "coaches",
+                "{{coachId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentsVerified\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Выдать claim-ссылку",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/coaches/{{coachId}}/claim-link",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "coaches",
+                "{{coachId}}",
+                "claim-link"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Архивировать (только SUPER_ADMIN)",
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{superAdminToken}}"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/coaches/{{coachId}}/archive",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "coaches",
+                "{{coachId}}",
+                "archive"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Выгрузка CSV (только SUPER_ADMIN)",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{superAdminToken}}"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/coaches/export/csv",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "coaches",
+                "export",
+                "csv"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Админка — Обзвон",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{managerToken}}"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "Мои звонки",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/call-records",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "call-records"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Создать запись обзвона",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/call-records",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "call-records"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coachId\": \"{{coachId}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Изменить статус звонка",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/call-records/{{callRecordId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "call-records",
+                "{{callRecordId}}",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"CALLBACK\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Добавить комментарий (только добавление!)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/call-records/{{callRecordId}}/comments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "call-records",
+                "{{callRecordId}}",
+                "comments"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Дозвонилась, тренер попросил перезвонить завтра.\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Админка — Отзывы и жалобы (SUPER_ADMIN)",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{superAdminToken}}"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "Очередь жалоб",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/reviews/complaints",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "reviews",
+                "complaints"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Разобрать жалобу",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/reviews/complaints/{{complaintId}}/resolve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "reviews",
+                "complaints",
+                "{{complaintId}}",
+                "resolve"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resolution\": \"hide\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Скрыть отзыв напрямую",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/reviews/{{reviewId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "reviews",
+                "{{reviewId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Отредактировать отзыв",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/reviews/{{reviewId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "reviews",
+                "{{reviewId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Исправленный текст отзыва без опечаток\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Админка — Статистика менеджера",
+      "item": [
+        {
+          "name": "Моя статистика (менеджер)",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{managerToken}}"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/manager-stats/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "manager-stats",
+                "me"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Статистика по всем менеджерам (SUPER_ADMIN)",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{superAdminToken}}"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/manager-stats/all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "manager-stats",
+                "all"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Админка — Заявки на новый вид спорта (SUPER_ADMIN)",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{superAdminToken}}"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "Список заявок",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sport-requests?status=PENDING",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sport-requests"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "PENDING"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Одобрить заявку",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sport-requests/{{sportRequestId}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sport-requests",
+                "{{sportRequestId}}",
+                "approve"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Отклонить заявку",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sport-requests/{{sportRequestId}}/reject",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sport-requests",
+                "{{sportRequestId}}",
+                "reject"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Служебное",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Запросить код по SMS",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/sms/request",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "sms",
+                "request"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"+79001234567\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Подтвердить код входа",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/verify-code",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "verify-code"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"+79001234567\",\n  \"code\": \"123456\"\n}"
+            }
+          }
+        },
+        {
+          "name": "VK ID callback (заглушка 501)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/vk/callback",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "vk",
+                "callback"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Claim — предпросмотр анкеты",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/claim/{{claimToken}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "claim",
+                "{{claimToken}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Claim — подтвердить анкету",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/claim/{{claimToken}}/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "claim",
+                "{{claimToken}}",
+                "confirm"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"consent\": true\n}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

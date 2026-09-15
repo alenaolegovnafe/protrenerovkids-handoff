@@ -1,0 +1,46 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: protrenerovkids
+      POSTGRES_PASSWORD: protrenerovkids
+      POSTGRES_DB: protrenerovkids
+    ports:
+      - "5432:5432"
+    volumes:
+      - protrenerovkids_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U protrenerovkids"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Хранилище одноразовых кодов подтверждения (см. src/lib/otpStore.js).
+  # Без OTP_STORE=redis в .env приложение использует память процесса и этот
+  # сервис ему не нужен — поднимать его обязательно только для прода.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  protrenerovkids_db_data:
+
+# ПРИМЕЧАНИЕ(разработчик): этот docker-compose поднимает только базу — сам
+# сервер (npm start) и воркер (npm run worker) запускаются вне Docker при
+# разработке. Когда появится Dockerfile для приложения, воркер стоит вынести
+# отдельным сервисом (не смешивать с web-процессом), например:
+#
+# worker:
+#   build: .
+#   command: npm run worker
+#   restart: unless-stopped
+#   depends_on: [db]
+#   env_file: .env
