@@ -1,0 +1,679 @@
+// ProtrenerovKids.ru — схема базы данных
+// Реализует: роли (менеджер / супер-админ), закрепление анкет за менеджером,
+// защиту от дублей, таблицу обзвона с неизменяемыми комментариями, жалобы на отзывы.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Пользователи админки ----------
+
+enum AdminRole {
+  MANAGER      // обзвон, ввод анкет, SMS — доступ только к своим тренерам
+  SUPER_ADMIN  // полный доступ, единственный, кто может удалять отзывы,
+               // разбирать жалобы, выгружать данные, публиковать новые виды спорта
+}
+
+model AdminUser {
+  id             String   @id @default(uuid())
+  name           String
+  phone          String   @unique
+  // Для поиска при входе по SMS-коду — тот же принцип, что у Coach:
+  // "+7 900..." и "8 900..." должны находить одну и ту же запись.
+  phoneNormalized String  @unique
+  role           AdminRole
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  // Только для SUPER_ADMIN — вход email/пароль + SMS 2FA (см. routes/auth.js).
+  // MANAGER продолжает логиниться просто по SMS (см. POST /api/auth/verify-code) —
+  // это осознанное решение из ТЗ, не ослабление их прав, у них и так меньше
+  // полномочий, чем у SUPER_ADMIN. NULL для менеджеров, обязателен для супер-админа
+  // (проверяется в коде, не на уровне схемы — Prisma не умеет условный required).
+  email          String?  @unique
+  passwordHash   String?  // bcrypt, см. lib/adminAuth.js — никогда не plaintext
+
+  coaches      Coach[]        @relation("CoachCreatedBy")
+  callRecords  CallRecord[]   @relation("CallRecordManager")
+  callComments CallComment[]  @relation("CallCommentAuthor")
+  auditLogs    AuditLog[]
+  managerPlan  ManagerPlan?
+  sessions     ManagerSession[]
+}
+
+// ---------- Сессии входа менеджеров — для анализа рабочего времени ----------
+// loginAt/logoutAt — то, что явно попросили: во сколько зашёл, во сколько
+// вышел. lastActivityAt — дополнение: если менеджер просто закрыл вкладку,
+// не нажав "Выйти" (обычное дело), logoutAt так и останется пустым навсегда —
+// без lastActivityAt в таком случае вообще не было бы способа понять,
+// когда реально закончилась работа, а не только когда истёк токен (через 7 дней).
+
+model ManagerSession {
+  id             String    @id @default(uuid())
+  adminId        String
+  admin          AdminUser @relation(fields: [adminId], references: [id])
+  jti            String    @unique // тот же jti, что и в самом JWT — по нему находим сессию при logout
+  loginAt        DateTime  @default(now())
+  lastActivityAt DateTime  @default(now())
+  logoutAt       DateTime?
+
+  @@index([adminId])
+}
+
+// ---------- План менеджера и коэффициент к оплате ----------
+//
+// Считаем по verifiedAt (см. Coach.verifiedAt) — только реально
+// подтверждённые анкеты, не черновики. Именно это приносит пользу бизнесу,
+// не сам факт заведения анкеты.
+//
+// Цели — персональные для каждого менеджера (может быть разная нагрузка),
+// пороги коэффициента — общие для всех (PayCoefficientTier ниже).
+
+model ManagerPlan {
+  id            String   @id @default(uuid())
+  managerId     String   @unique
+  manager       AdminUser @relation(fields: [managerId], references: [id])
+
+  dailyTarget   Int      @default(1)
+  weeklyTarget  Int      @default(5)
+  monthlyTarget Int      @default(15)
+
+  updatedAt     DateTime @updatedAt
+}
+
+// Пороги коэффициента к оплате — считается по проценту выполнения
+// МЕСЯЧНОГО плана (см. lib/managerPlan.js). Например:
+// minPercent:0 coefficient:0.8, minPercent:50 coefficient:1.0,
+// minPercent:100 coefficient:1.2, minPercent:150 coefficient:1.5 —
+// это лишь стартовые значения из seed-данных, реальные цифры суперадмин
+// задаёт и меняет сам через админку (POST/PATCH /api/admin/pay-tiers),
+// без участия разработчика — это решение про деньги, не про код.
+
+model PayCoefficientTier {
+  id          String @id @default(uuid())
+  minPercent  Int    @unique // выполнение плана от скольки % включительно
+  coefficient Float
+  label       String? // например "Ниже базы", "База", "Хорошо", "Отлично"
+}
+
+// ---------- Тренеры ----------
+
+enum CoachStatus {
+  DRAFT
+  PENDING_CONSENT
+  VERIFIED
+  ARCHIVED
+}
+
+enum HockeyStickType {
+  WITH_STICK
+  WITHOUT_STICK
+}
+
+enum BookingMode {
+  FORM
+  CALENDAR
+  DIRECT_CONTACT
+}
+
+model Coach {
+  id                 String      @id @default(uuid())
+  status             CoachStatus @default(DRAFT)
+  // Момент именно перехода в VERIFIED — не updatedAt, который двигается
+  // при ЛЮБОМ изменении анкеты (например, админ поправил опечатку) и не
+  // подходит для точного подсчёта "сколько подтверждено за эту неделю"
+  // (см. lib/managerPlan.js).
+  verifiedAt         DateTime?
+
+  fullName           String
+  phone              String      // основной критерий дедупликации, см. lib/duplicateCheck.js
+  phoneNormalized     String     // только цифры (последние 10), для поиска дублей — заполняется автоматически
+  photoUrl           String?
+  sport              String      // 'figure_skating' | 'hockey'
+  hockeyStickType    HockeyStickType?  // только для sport = hockey
+  age                Int?
+  experienceYears    Int?
+  qualification      String?     // квалификация текстом (КМС, 1 разряд и т.п.)
+  about              String?
+  ageGroups          Json?       // ["3-6","7-12","13-17","18+"]
+
+  documentsVerified  Boolean     @default(false)
+  documentFiles      Json?       // ссылки на загруженные файлы (видит только админка)
+
+  priceFrom          Int?
+  bookingMode        BookingMode @default(FORM)
+  directContactPhone String?
+  directContactTelegram String?  // телефон или @ник — фронтенд сам определяет и строит t.me-ссылку
+  directContactMax   String?     // ссылка на профиль MAX, вставляется тренером вручную (у MAX нет ссылки по номеру)
+
+  // Привязывается, когда тренер сам инициирует связку через бота (команда
+  // /start с уникальным токеном — механизм генерации токена ещё не построен,
+  // см. TODO в routes/webhooks.js). Пока не привязан — уведомления не шлём.
+  telegramChatId     String?     @unique
+
+  // Привязывается через VK ID (см. lib/vkIdProvider.js — сам обмен кода на
+  // токен ещё заблокирован, см. BLOCKED_EXTERNAL.md, но поле уже здесь,
+  // чтобы при реализации не понадобилась ещё одна миграция).
+  vkId               String?     @unique
+
+  // isPremium/premiumExpiresAt/cancelAtPeriodEnd — денормализованная проекция
+  // состояния подписки, для быстрого чтения (публичный профиль, каталог).
+  // ЕДИНСТВЕННОЕ место, которое пишет в эти три поля — lib/entitlement.js
+  // recomputeEntitlement(). Больше НИГДЕ не присваивать их напрямую —
+  // иначе проекция разойдётся с реальным состоянием Subscription/Payment.
+  isPremium          Boolean     @default(false)
+  premiumExpiresAt   DateTime?
+  cancelAtPeriodEnd  Boolean     @default(false)
+  calendarEnabled    Boolean     @default(true)
+
+  // Claim-ссылка: выдаётся при переводе DRAFT → PENDING_CONSENT,
+  // тренер переходит по ней и подтверждает анкету (см. lib/claimToken.js)
+  claimToken         String?     @unique
+  // SMS-шаблон обещает тренеру "ссылка действует 7 дней" — это поле и есть
+  // то, что делает это правдой, а не просто текстом в сообщении.
+  claimTokenExpiresAt DateTime?
+
+  // Кем заведена анкета — ключевое поле для разграничения доступа менеджеров
+  createdById        String
+  createdBy          AdminUser   @relation("CoachCreatedBy", fields: [createdById], references: [id])
+
+  rating             Decimal     @default(0) @db.Decimal(2, 1)
+  reviewsCount       Int         @default(0)
+  verifiedReviewsCount Int       @default(0) // для геймификации "10 отзывов = месяц премиума"
+
+  // Счётчик кликов по прямому контакту (телефон/Telegram/MAX) —
+  // денормализован для быстрой сортировки "самый популярный тренер" в админке,
+  // не пересчитывается через COUNT() на каждый запрос. Обновляется в
+  // POST /api/coaches/:id/contact-click (см. routes/public/coaches.js).
+  contactClicksCount Int         @default(0)
+
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  reviews            Review[]
+  callRecords        CallRecord[]
+  bookings           Booking[]
+  diarySlots         DiarySlot[]
+  arenas             CoachArena[]
+  contactClicks      ContactClick[]
+  subscriptions      Subscription[]
+  premiumGrants      PremiumGrant[]
+  boosts             CoachBoost[]
+  boostWaitlistEntries BoostWaitlistEntry[]
+
+  @@index([phoneNormalized])
+  @@index([createdById])
+  @@index([status, sport, rating])
+  @@index([contactClicksCount])
+}
+
+// ---------- Клики по прямому контакту ----------
+// Отдельный журнал (не только счётчик) — пригодится для аналитики по времени
+// и по каналам, а не только для общего рейтинга популярности.
+
+enum ContactClickChannel {
+  PHONE
+  TELEGRAM
+  MAX
+}
+
+model ContactClick {
+  id        String              @id @default(uuid())
+  coachId   String
+  coach     Coach               @relation(fields: [coachId], references: [id])
+  channel   ContactClickChannel
+  createdAt DateTime            @default(now())
+
+  @@index([coachId])
+  @@index([createdAt])
+}
+
+// ---------- Подписка на «Прямой контакт» и другие платные функции ----------
+//
+// Разделение понятий (см. обсуждение с заказчиком и технический аудит):
+// - Subscription — "разрешение на регулярное списание" (recurring permission)
+//   у конкретного провайдера + текущее состояние периода. Одна запись живёт
+//   всё время, пока клиент не отменит услугу полностью.
+// - Payment — каждое отдельное списание/попытка списания/возврат. Один платёж
+//   = один оплаченный период (см. lib/webhookHandlers/payment.js — там же
+//   объяснение, почему НЕЛЬЗЯ продлевать период по двум разным событиям).
+// - Coach.isPremium/premiumExpiresAt/cancelAtPeriodEnd — денормализованная
+//   ПРОЕКЦИЯ этого состояния, пересчитывается из Subscription в одном месте
+//   (lib/entitlement.js), никогда не пишется напрямую из вебхука или роута.
+
+enum SubscriptionStatus {
+  PENDING              // долгосрочное согласие оформлено, первый платёж ещё не подтверждён
+  ACTIVE               // есть хотя бы один успешный платёж, автопродление включено
+  CANCEL_AT_PERIOD_END // автопродление выключено, донашивает текущий period
+  CANCELED             // отменена (в т.ч. с возвратом в первые 3 дня)
+  EXPIRED              // период истёк, следующий платёж не пришёл
+}
+
+model Subscription {
+  id                     String             @id @default(uuid())
+  coachId                String
+  coach                  Coach              @relation(fields: [coachId], references: [id])
+
+  // "customer" и "payment method" в терминах провайдера — что именно у него
+  // за сущности, зависит от выбранного провайдера (см. lib/paymentProvider.js)
+  provider               String             // 'mock' | 'yookassa' | ... — см. config/premium.js
+  providerSubscriptionId String?            // id "долгосрочного согласия" на автоплатёж у провайдера
+
+  status                 SubscriptionStatus @default(PENDING)
+  cancelAtPeriodEnd      Boolean            @default(false)
+
+  // Границы ТЕКУЩЕГО оплаченного периода — единственный источник правды для
+  // "прошло ли уже 3 дня с последней оплаты" (lib/subscriptionCancel.js) и
+  // для того, до какого момента донашивать доступ при отмене.
+  currentPeriodStart     DateTime?
+  currentPeriodEnd       DateTime?
+
+  // Напоминание "спишем через 3-5 дней" (п. 4.3 публичной оферты) должно
+  // отправиться РОВНО один раз за текущий оплаченный период — без этого
+  // поля ежедневная джоба слала бы одно и то же напоминание каждый день
+  // подряд, пока не наступит дата списания.
+  renewalReminderSentAt  DateTime?
+
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  payments               Payment[]
+
+  @@index([coachId])
+  @@index([status])
+}
+
+enum PaymentStatus {
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+model Payment {
+  id                 String        @id @default(uuid())
+  subscriptionId     String
+  subscription       Subscription  @relation(fields: [subscriptionId], references: [id])
+
+  provider           String
+  // Идентификатор СОБЫТИЯ вебхука провайдера — НЕ идентификатор платежа.
+  // Уникальный индекс на это поле — и есть идемпотентность: повторно
+  // пришедший вебхук просто не создаст вторую запись (см. webhooks.js).
+  providerEventId    String        @unique
+  providerPaymentId  String?
+
+  amountRub          Int
+  status             PaymentStatus
+  refundedAt         DateTime?
+
+  createdAt          DateTime      @default(now())
+
+  @@index([subscriptionId])
+}
+
+// ---------- Идемпотентность вебхука Telegram ----------
+// Telegram может повторно прислать тот же update, если наш сервер не успел
+// ответить вовремя — уникальный индекс на updateId защищает от повторной
+// обработки (например, повторной отправки уведомления тренеру).
+
+model TelegramUpdate {
+  id        String   @id @default(uuid())
+  updateId  Int      @unique
+  createdAt DateTime @default(now())
+}
+
+// ---------- Поднятие анкеты в топ (ограниченное число мест) ----------
+//
+// Места считаются ОТДЕЛЬНО по каждому виду спорта (топ-5 фигурного катания
+// и топ-5 хоккея — разные пулы, не общий). Пока сознательно простая версия:
+// без аукциона при нехватке мест — живая очередь (кто раньше встал, тот и
+// получит место, когда оно освободится). Аукцион, если понадобится позже —
+// отдельная задача поверх этой же модели, не переделка с нуля.
+
+enum BoostTier {
+  TOP_1_5
+  TOP_5_10
+}
+
+model CoachBoost {
+  id        String    @id @default(uuid())
+  coachId   String
+  coach     Coach     @relation(fields: [coachId], references: [id])
+  sport     String
+  tier      BoostTier
+  startedAt DateTime  @default(now())
+  expiresAt DateTime
+  // Денормализация ради простых запросов "сколько сейчас занято мест" —
+  // единственное место, которое её меняет: lib/boostSlots.js.
+  isActive  Boolean   @default(true)
+
+  @@index([sport, tier, isActive])
+}
+
+// Очередь на случай, если мест на момент запроса не было. Одна и та же
+// анкета не может встать в очередь дважды на один и тот же пул мест —
+// иначе изменится позиция в очереди без реального нового запроса.
+model BoostWaitlistEntry {
+  id          String    @id @default(uuid())
+  coachId     String
+  coach       Coach     @relation(fields: [coachId], references: [id])
+  sport       String
+  tier        BoostTier
+  requestedAt DateTime  @default(now())
+  notifiedAt  DateTime? // когда сообщили тренеру, что место освободилось
+
+  @@unique([coachId, sport, tier], name: "coachSportTier")
+  @@index([sport, tier, requestedAt])
+}
+
+// ---------- Идемпотентность платёжного вебхука — на уровне ЛЮБОГО события ----------
+// Payment.providerEventId защищает только события, которые доходят до
+// начисления периода (payment.succeeded). Но subscription.created и
+// subscription.cancelled тоже приходят с уникальным id от провайдера и
+// тоже могут задублироваться при ретрае — этот журнал ловит абсолютно
+// любой повтор, независимо от типа события, до того как код вообще
+// начнёт его обрабатывать.
+model WebhookEvent {
+  id         String   @id @default(uuid())
+  provider   String
+  eventId    String
+  eventType  String
+  receivedAt DateTime @default(now())
+
+  @@unique([provider, eventId])
+}
+
+// ---------- Бонусные начисления (10 отзывов = месяц в подарок) ----------
+// Без отдельной записи повторный вызов (гонка, повтор запроса, баг) мог бы
+// начислить бонус дважды на одном и том же 10-м/20-м/30-м отзыве.
+// milestone — это verifiedReviewsCount на момент начисления (10, 20, 30...),
+// уникальность (coachId, milestone) не даёт начислить один и тот же рубеж повторно.
+
+model PremiumGrant {
+  id         String   @id @default(uuid())
+  coachId    String
+  coach      Coach    @relation(fields: [coachId], references: [id])
+  reason     String   // 'reviews_milestone_10' и т.п. — свободная строка, не enum, чтобы не плодить миграции под каждый новый повод
+  milestone  Int
+  grantedDays Int
+  createdAt  DateTime @default(now())
+
+  @@unique([coachId, milestone, reason])
+}
+
+// ---------- Отозванные токены (настоящий logout) ----------
+// JWT сам по себе нельзя "отменить" — сервер ничего не помнит про уже
+// выданные токены. Чтобы logout работал по-настоящему (не только удалял
+// куку/токен на клиенте, а реально переставал пускать по старому токену),
+// каждый токен получает уникальный jti (см. lib/tokens.js), и при logout
+// этот jti попадает сюда. Проверяется в middleware/auth.js и coachAuth.js
+// при КАЖДОМ запросе — да, это лишний запрос к БД на каждый запрос, это
+// осознанный компромисс безопасность/производительность для проекта такого
+// масштаба. Строки чистятся сами по expiresAt — см. scripts/cleanupRevokedTokens.js.
+
+model RevokedToken {
+  jti       String   @id
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
+// ---------- Площадки тренера (many-to-many с арены) ----------
+
+model CoachArena {
+  coachId String
+  coach   Coach  @relation(fields: [coachId], references: [id])
+  arenaId String
+  arena   Arena  @relation(fields: [arenaId], references: [id])
+
+  @@id([coachId, arenaId])
+}
+
+enum ArenaScheduleSource {
+  LIVE_SITE
+  VK_GROUP
+  MANUAL_WEEKLY
+  DATE_SPECIFIC
+  CONTACTS_ONLY
+}
+
+model Arena {
+  id             String              @id @default(uuid())
+  name           String
+  address        String
+  phone          String?
+  website        String?
+  scheduleSource ArenaScheduleSource @default(CONTACTS_ONLY)
+  scheduleData   Json?
+  updatedAt      DateTime            @updatedAt
+
+  coaches        CoachArena[]
+}
+
+model SportSchool {
+  id          String   @id @default(uuid())
+  name        String
+  address     String
+  phone       String
+  ageNote     String?  // "уточняйте", пока нет точных данных
+  priceNote   String?
+  isPublished Boolean  @default(false)
+}
+
+// ---------- Заявки от учеников (режим "форма") ----------
+
+enum BookingStatus {
+  NEW
+  PROCESSED
+}
+
+model Booking {
+  id           String        @id @default(uuid())
+  coachId      String
+  coach        Coach         @relation(fields: [coachId], references: [id])
+
+  clientName   String
+  clientPhone  String
+  childName    String?
+  childAge     Int?
+  status       BookingStatus @default(NEW)
+  // Заявка не считается подтверждённой, пока клиент не ввёл код из SMS
+  // (см. routes/public/coaches.js) — без этого что угодно можно было бы
+  // "заспамить" тренеру фейковыми заявками с чужим номером.
+  isVerified   Boolean       @default(false)
+  createdAt    DateTime      @default(now())
+
+  @@index([coachId])
+}
+
+// ---------- Дневник тренировок (режим "календарь") ----------
+
+model DiarySlot {
+  id          String   @id @default(uuid())
+  coachId     String
+  coach       Coach    @relation(fields: [coachId], references: [id])
+
+  dayOfWeek   Int      // 0-6
+  startTime   String   // "11:15"
+  arenaId     String?
+  studentName String?  // null = свободно (зелёный), заполнено = занято (красный)
+
+  @@index([coachId])
+}
+
+// ---------- Заявки на новый вид спорта ----------
+
+enum SportRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model SportRequest {
+  id        String              @id @default(uuid())
+  status    SportRequestStatus  @default(PENDING)
+  payload   Json                // вся анкета целиком: фото, ФИО, вид спорта, город, телефон,
+                                 // возраст, стаж, о себе, арены, цена, возрастные категории
+  createdAt DateTime            @default(now())
+}
+
+// ---------- "Оставить отзыв" → приглашение тренера ----------
+
+enum ReferralStatus {
+  NEW
+  CONTACTED
+}
+
+model CoachReferral {
+  id          String         @id @default(uuid())
+  coachName   String
+  parentPhone String
+  status      ReferralStatus @default(NEW)
+  createdAt   DateTime       @default(now())
+}
+
+// ---------- Журнал согласий на ПД (для юридической защиты) ----------
+
+enum ConsentSubjectType {
+  BOOKING
+  REVIEW
+  PUBLISH
+  PAYMENT
+  REFERRAL
+}
+
+model Consent {
+  id                  String             @id @default(uuid())
+  subjectType         ConsentSubjectType
+  subjectId           String
+  phone               String
+  consentTextVersion  String             // версия текста согласия на момент подписания
+  ipAddress           String?
+  createdAt           DateTime           @default(now())
+
+  @@index([subjectType, subjectId])
+}
+
+// ---------- Таблица обзвона ----------
+
+enum CallStatus {
+  NEW          // ещё не звонили
+  NO_ANSWER    // не дозвонился
+  CALLBACK     // тренер попросил перезвонить
+  DECLINED     // отказался размещаться
+  IN_PROGRESS  // согласился, анкета заполняется
+  DONE         // анкета опубликована
+}
+
+model CallRecord {
+  id          String     @id @default(uuid())
+  coachId     String
+  coach       Coach      @relation(fields: [coachId], references: [id])
+
+  managerId   String
+  manager     AdminUser  @relation("CallRecordManager", fields: [managerId], references: [id])
+
+  status      CallStatus @default(NEW)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  comments    CallComment[]
+
+  @@index([managerId])
+  @@index([coachId])
+}
+
+// Комментарии — журнал, а не редактируемое поле.
+// Строки никогда не обновляются и не удаляются (см. routes/callRecords.js — там просто нет PATCH/DELETE).
+model CallComment {
+  id            String      @id @default(uuid())
+  callRecordId  String
+  callRecord    CallRecord  @relation(fields: [callRecordId], references: [id])
+
+  authorId      String
+  author        AdminUser   @relation("CallCommentAuthor", fields: [authorId], references: [id])
+
+  text          String
+  createdAt     DateTime    @default(now()) // дата и время проставляются автоматически
+
+  @@index([callRecordId])
+}
+
+// ---------- Отзывы и жалобы ----------
+
+model Review {
+  id            String    @id @default(uuid())
+  coachId       String
+  coach         Coach     @relation(fields: [coachId], references: [id])
+
+  clientPhone   String
+  // Необязательное имя для подписи неанонимного отзыва (форма на сайте
+  // предлагает его указать). Если не заполнено ИЛИ isAnonymous:true —
+  // фронтенд показывает замаскированный номер телефона вместо имени.
+  clientName    String?
+  isAnonymous   Boolean   @default(false)
+  text          String
+  rating        Int
+  isVerified    Boolean   @default(false) // подтверждён по SMS
+  coachReply    String?
+  isHidden      Boolean   @default(false) // мягкое скрытие вместо физического удаления
+
+  createdAt     DateTime  @default(now())
+
+  complaints    ReviewComplaint[]
+
+  @@index([coachId])
+}
+
+enum ComplaintReason {
+  OFFENSIVE       // оскорбительный контент
+  WRONG_COACH     // отзыв оставлен не тому тренеру
+  OTHER
+}
+
+enum ComplaintStatus {
+  OPEN        // ждёт решения супер-админа
+  RESOLVED_HIDDEN   // отзыв скрыт
+  RESOLVED_MOVED    // отзыв перенесён другому тренеру
+  RESOLVED_DISMISSED // жалоба отклонена, отзыв оставлен как есть
+}
+
+model ReviewComplaint {
+  id          String          @id @default(uuid())
+  reviewId    String
+  review      Review          @relation(fields: [reviewId], references: [id])
+
+  reason      ComplaintReason
+  comment     String?
+  reporterContact String?    // необязательный контакт для обратной связи
+
+  status      ComplaintStatus @default(OPEN)
+  resolvedById String?
+  resolvedAt   DateTime?
+
+  createdAt   DateTime        @default(now())
+
+  @@index([status])
+}
+
+// ---------- Журнал действий (кто что изменил) ----------
+
+model AuditLog {
+  id          String    @id @default(uuid())
+  adminId     String
+  admin       AdminUser @relation(fields: [adminId], references: [id])
+
+  action      String    // например 'coach.export', 'sms.send', 'review.delete'
+  targetType  String?   // 'coach' | 'review' | ...
+  targetId    String?
+  meta        Json?
+
+  createdAt   DateTime  @default(now())
+
+  @@index([adminId])
+}
